@@ -1,0 +1,122 @@
+#!/bin/bash
+
+export WIFI_IF="wlan0"
+export AP_SSID="AP2Connect"
+
+############################################################"
+
+message_red() 		{ echo -e "\e[0;31m $1 \e[0m"; }
+message_yellow()	{ echo -e "\e[0;33m $1 \e[0m"; }
+message_green() 	{ echo -e "\e[0;32m $1 \e[0m"; }
+
+usage()
+{
+	echo
+	echo "################################################################################################################################"
+	echo "This script auto connects to '$AP_SSID' through interface '$WIFI_IF'."
+	echo "If these do not exist, you will be prompted to choose among a list of 'INTERFACES' and/or 'AP_SSID' during execution."
+	echo
+	echo "You can specify both at execution."
+	echo "Usage: $0 [WIFI_INTERFACE] [AP_SSID]"
+	echo "################################################################################################################################"
+	echo
+}
+
+usage
+
+if [ "x$1" == "x-h" ] || [ "x$1" == "x--help" ] 
+then
+	exit 0
+fi
+
+export WIFI_IF=${1:-"$WIFI_IF"}
+export AP_SSID=${2:-"$AP_SSID"}
+
+##################################
+
+sudo service isc-dhcp-server stop
+sudo service hostapd stop
+
+which nmcli 2>&1 > /dev/null
+if [ $? -eq 0 ]
+then
+	sudo nmcli radio wifi off
+	sudo nmcli radio wwan off
+	sudo rfkill unblock wlan
+fi
+
+ifconfig | grep "^$WIFI_IF " 2>&1 > /dev/null
+while [ $? -ne 0 ]
+do
+        message_red "'$WIFI_IF' doesn't exist, please choose a WIFI INTERFACE from list:"
+	#ifconfig | awk '/^\w.*/ {print $1}'
+	#iw dev | egrep 'Interface|type'
+	iwconfig 2>/dev/null | grep '^\b' | cut -d' ' -f1
+        message_yellow "Type WIFI INTERFACE:"
+        read WIFI_IF
+        message_green "You chose WIFI INTERFACE : $WIFI_IF"
+	iwconfig 2> /dev/null | grep "^$WIFI_IF " 2>&1 > /dev/null
+done
+
+LINK_STATUS=$(iw dev $WIFI_IF link | wc -l)
+
+if [ $LINK_STATUS -gt 1 ]
+then
+	CONNECTED_SSID=$( iw dev $WIFI_IF link| awk '/SSID/ {print $2}' )
+	if [ "x$CONNECTED_SSID" == "x$AP_SSID" ]
+	then
+		message_green "Connection to '$AP_SSID' through '$WIFI_IF' already established."
+	else
+		while [ "x$KEY" != "xy" ] && [ "x$KEY" != "xn" ]
+		do
+			message_red "'$WIFI_IF' already connected to '$CONNECTED_SSID'."
+			message_yellow "Do you wish to disconnect and connect to '$AP_SSID' ? Yes (y) / No (n)"
+	        	read KEY
+		done
+		if [ "x$KEY" == "xy" ] 
+		then
+			#sudo dhclient -r $WIFI_IF
+			#sudo iwconfig $WIFI_IF essid off
+			#sudo ip link set $WIFI_IF down
+			#sudo ifconfig $WIFI_IF down
+			#sudo ifconfig $WIFI_IF up
+			LINK_STATUS=1
+		else
+			exit 0
+		fi
+	fi
+fi
+		
+if [ $LINK_STATUS -eq 1 ]
+then
+        #sudo iwlist $WIFI_IF scan | grep SSID
+        message_green "Connecting to AP: $AP_SSID"
+        sudo iwconfig $WIFI_IF essid $AP_SSID
+        while [ $? -ne 0 ]
+        do
+                message_red "'$AP_SSID' doesn't exist, please choose AP from list:"
+                sudo iwlist $WIFI_IF scan | grep SSID
+                message_yellow "Type AP SSID:"
+                read AP_SSID
+                message_green "You chose AP SSID : $AP_SSID"
+                sudo iwconfig $WIFI_IF essid $AP_SSID
+        done
+        sleep 1
+fi
+
+MY_IP=$( ifconfig $WIFI_IF | awk '/inet addr/ { gsub("addr:","",$2); print $2 }' )
+if [ "x$MY_IP" == "x" ]
+then
+	message_green "DHCP IP request..."
+	sudo dhclient -v $WIFI_IF -r
+	sudo dhclient -v $WIFI_IF
+else
+	message_green "DHCP lease still valid."
+fi
+
+message_green "My IP addr is : $MY_IP"
+AP_IP=$( ifconfig $WIFI_IF | sed -n '/inet addr/ s@^ *inet addr:\([0-9]\+\.[0-9]\+\.[0-9]\+\).*$@\1.1@p' )
+message_green "Connecting to $AP_IP..."
+
+ssh root@$AP_IP
+
