@@ -110,6 +110,8 @@ then
 	message_green "DHCP IP request..."
 	sudo dhclient -v $WIFI_IF -r
 	sudo dhclient -v $WIFI_IF
+	sleep 1
+	MY_IP=$( ifconfig $WIFI_IF | awk '/inet addr/ { gsub("addr:","",$2); print $2 }' )
 else
 	message_green "DHCP lease still valid."
 fi
