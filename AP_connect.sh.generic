@@ -89,7 +89,7 @@ if [ $LINK_STATUS -eq 1 ]
 then
         #sudo iwlist $WIFI_IF scan | grep SSID
         message_green "Connecting to AP: $AP_SSID"
-        sudo iwlist $WIFI_IF scan | grep $AP_SSID
+        sudo iwlist $WIFI_IF scan | grep $AP_SSID 2>&1 > /dev/null
         while [ $? -ne 0 ]
         do
                 message_red "'$AP_SSID' doesn't exist, please choose AP from list:"
@@ -97,7 +97,7 @@ then
                 message_yellow "Type AP SSID:"
                 read AP_SSID
                 message_green "You chose AP SSID : $AP_SSID"
-		sudo iwlist $WIFI_IF scan | grep $AP_SSID
+		sudo iwlist $WIFI_IF scan | grep $AP_SSID 2>&1 > /dev/null
         done
 	sudo iwconfig $WIFI_IF essid $AP_SSID
         sleep 1
